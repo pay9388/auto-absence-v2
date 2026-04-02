@@ -1,20 +1,45 @@
-"""결석신고서 자동 생성기 v2 - Tkinter UI"""
+"""결석신고서 자동 생성기 v2 - CustomTkinter UI"""
 import os
 import threading
 import tkinter as tk
+import webbrowser
 from tkinter import filedialog, messagebox, ttk
 
+import customtkinter as ctk
 from datetime import date as _date
 from src.parser import parse_neis
 from src.builder import build_hwpx
 
+ctk.set_appearance_mode("dark")
+ctk.set_default_color_theme("blue")
+
+# 다크 색상 팔레트
+_BG       = '#1e1e2e'   # 창 배경
+_FRAME    = '#2a2a3d'   # 카드/프레임 배경
+_TREE_BG  = '#1e1e2e'   # Treeview 배경
+_HEAD_BG  = '#16213e'   # Treeview 헤더
+_FG       = '#cdd6f4'   # 기본 텍스트
+_ACCENT   = '#89b4fa'   # 강조색 (파랑)
+_SEL      = '#313244'   # Treeview 선택 배경
 
 # 미리보기 컬럼 → student dict 매핑
 PREVIEW_COLS = ['번호', '이름', '유형', '일자', '결시교시', '사유', '증빙서류']
-COL_WIDTHS   = [55, 90, 65, 100, 100, 140, 110]
+COL_WIDTHS   = [55, 90, 110, 100, 100, 140, 110]
+
+_FULL_TYPE = {
+    ('결석', '질병'): '질병결석',
+    ('결석', '인정'): '출석인정결석',
+    ('지각', '인정지각'): '출석인정지각',
+    ('조퇴', '인정조퇴'): '출석인정조퇴',
+    ('결과', '인정결과'): '출석인정결과',
+}
 
 
 def _fmt_preview(student, col):
+    if col == '유형':
+        유형 = student.get('유형', '')
+        sub  = student.get('결석종류') or student.get('조퇴종류') or ''
+        return _FULL_TYPE.get((유형, sub), 유형)
     if col == '일자':
         s = student.get('시작일')
         e = student.get('종료일')
@@ -27,13 +52,34 @@ def _fmt_preview(student, col):
     return str(student.get(col, '') or '')
 
 
-class App(tk.Tk):
+def _apply_treeview_style():
+    style = ttk.Style()
+    style.theme_use('default')
+    style.configure('Dark.Treeview',
+        background=_TREE_BG, foreground=_FG,
+        fieldbackground=_TREE_BG, rowheight=26,
+        borderwidth=0, font=('', 9))
+    style.configure('Dark.Treeview.Heading',
+        background=_HEAD_BG, foreground=_ACCENT,
+        relief='flat', font=('', 9, 'bold'))
+    style.map('Dark.Treeview',
+        background=[('selected', _SEL)],
+        foreground=[('selected', _FG)])
+    style.map('Dark.Treeview.Heading',
+        background=[('active', _FRAME)])
+    style.configure('Dark.Scrollbar',
+        background=_FRAME, troughcolor=_TREE_BG,
+        arrowcolor=_FG, borderwidth=0)
+
+
+class App(ctk.CTk):
     def __init__(self):
         super().__init__()
         self.title('결석신고서 자동 생성기 v2')
+        self.configure(fg_color=_BG)
         self.resizable(True, True)
-        self.minsize(760, 540)
-        self.geometry('860x600')
+        self.minsize(760, 560)
+        self.geometry('880x640')
 
         self._students   = []
         self._edit_entry = None
@@ -46,64 +92,87 @@ class App(tk.Tk):
         self._outpath     = tk.StringVar(
             value=os.path.join(os.path.expanduser('~'), 'Desktop', '결석신고서_출력.hwpx'))
         self._status    = tk.StringVar(value='나이스 출결 현황 파일을 선택해주세요.')
-        self._count_var = tk.StringVar(value='0명')
+        self._count_var = tk.StringVar(value='0건')
 
+        _apply_treeview_style()
         self._build_ui()
 
     def _build_ui(self):
-        style = ttk.Style(self)
-        try:
-            style.theme_use('clam')
-        except Exception:
-            pass
-
-        main = ttk.Frame(self, padding=10)
-        main.pack(fill='both', expand=True)
+        main = ctk.CTkFrame(self, fg_color='transparent')
+        main.pack(fill='both', expand=True, padx=16, pady=12)
 
         # ── [1] 학교 설정 ─────────────────────────────────────────────────────
-        row0 = ttk.Frame(main)
-        row0.pack(fill='x', pady=(0, 4))
+        row0 = ctk.CTkFrame(main, fg_color=_FRAME, corner_radius=10)
+        row0.pack(fill='x', pady=(0, 8))
 
-        ttk.Label(row0, text='학년:').pack(side='left')
-        ttk.Combobox(row0, textvariable=self._grade,
-                     values=['1', '2', '3'], width=3,
-                     state='readonly').pack(side='left', padx=(2, 12))
+        inner0 = ctk.CTkFrame(row0, fg_color='transparent')
+        inner0.pack(padx=12, pady=8)
 
-        ttk.Label(row0, text='반:').pack(side='left')
-        ttk.Entry(row0, textvariable=self._class_num, width=4).pack(side='left', padx=(2, 12))
+        ctk.CTkLabel(inner0, text='학년', text_color=_FG).pack(side='left')
+        ctk.CTkComboBox(inner0, values=['1', '2', '3'], variable=self._grade,
+                        width=64, state='readonly',
+                        fg_color=_BG, border_color=_ACCENT,
+                        button_color=_ACCENT, dropdown_fg_color=_FRAME,
+                        text_color=_FG).pack(side='left', padx=(4, 16))
 
-        ttk.Label(row0, text='담임교사:').pack(side='left')
-        ttk.Entry(row0, textvariable=self._teacher, width=10).pack(side='left', padx=(2, 0))
+        ctk.CTkLabel(inner0, text='반', text_color=_FG).pack(side='left')
+        ctk.CTkEntry(inner0, textvariable=self._class_num, width=52,
+                     fg_color=_BG, border_color=_ACCENT,
+                     text_color=_FG).pack(side='left', padx=(4, 16))
+
+        ctk.CTkLabel(inner0, text='담임교사', text_color=_FG).pack(side='left')
+        ctk.CTkEntry(inner0, textvariable=self._teacher, width=110,
+                     fg_color=_BG, border_color=_ACCENT,
+                     text_color=_FG).pack(side='left', padx=(4, 0))
 
         # ── [2] 파일 선택 ─────────────────────────────────────────────────────
-        row1 = ttk.Frame(main)
-        row1.pack(fill='x', pady=(0, 6))
+        row1 = ctk.CTkFrame(main, fg_color=_FRAME, corner_radius=10)
+        row1.pack(fill='x', pady=(0, 8))
 
-        ttk.Label(row1, text='출결 파일:').pack(side='left')
-        ttk.Entry(row1, textvariable=self._filepath, width=46,
-                  state='readonly').pack(side='left', padx=(4, 4))
-        ttk.Button(row1, text='파일 선택…',
-                   command=self._select_file).pack(side='left', padx=2)
+        inner1 = ctk.CTkFrame(row1, fg_color='transparent')
+        inner1.pack(fill='x', padx=12, pady=8)
+
+        ctk.CTkLabel(inner1, text='출결 파일', text_color=_FG).pack(side='left')
+        ctk.CTkEntry(inner1, textvariable=self._filepath,
+                     fg_color=_BG, border_color=_ACCENT, text_color=_FG,
+                     state='disabled').pack(
+            side='left', padx=(8, 8), expand=True, fill='x')
+        ctk.CTkButton(inner1, text='파일 선택…', command=self._select_file,
+                      width=90, corner_radius=8,
+                      fg_color=_ACCENT, text_color=_BG,
+                      hover_color='#74c7ec').pack(side='left')
 
         # ── [3] 미리보기 ─────────────────────────────────────────────────────
-        preview_frame = ttk.LabelFrame(main, text='데이터 미리보기', padding=4)
-        preview_frame.pack(fill='both', expand=True, pady=(0, 6))
+        preview_card = ctk.CTkFrame(main, fg_color=_FRAME, corner_radius=10)
+        preview_card.pack(fill='both', expand=True, pady=(0, 8))
 
-        count_row = ttk.Frame(preview_frame)
-        count_row.pack(fill='x')
-        ttk.Button(count_row, text='선택 병합',
-                   command=self._merge_selected).pack(side='left', padx=(0, 6))
-        ttk.Button(count_row, text='병합 해제',
-                   command=self._split_selected).pack(side='left')
-        ttk.Label(count_row, textvariable=self._count_var,
-                  foreground='#1a6bbf').pack(side='right')
+        # 헤더 행
+        hdr = ctk.CTkFrame(preview_card, fg_color='transparent')
+        hdr.pack(fill='x', padx=12, pady=(8, 4))
 
-        tree_wrap = ttk.Frame(preview_frame)
-        tree_wrap.pack(fill='both', expand=True)
+        ctk.CTkLabel(hdr, text='데이터 미리보기',
+                     text_color=_ACCENT, font=ctk.CTkFont(size=12, weight='bold')).pack(side='left')
+        ctk.CTkLabel(hdr, textvariable=self._count_var,
+                     text_color=_ACCENT).pack(side='right')
+
+        btn_row = ctk.CTkFrame(preview_card, fg_color='transparent')
+        btn_row.pack(fill='x', padx=12, pady=(0, 6))
+        ctk.CTkButton(btn_row, text='선택 병합', command=self._merge_selected,
+                      width=84, height=28, corner_radius=6,
+                      fg_color='#313244', text_color=_FG,
+                      hover_color=_ACCENT).pack(side='left', padx=(0, 6))
+        ctk.CTkButton(btn_row, text='병합 해제', command=self._split_selected,
+                      width=84, height=28, corner_radius=6,
+                      fg_color='#313244', text_color=_FG,
+                      hover_color='#f38ba8').pack(side='left')
+
+        # Treeview (tk.Frame 으로 감싸서 배경 통일)
+        tree_wrap = tk.Frame(preview_card, bg=_TREE_BG)
+        tree_wrap.pack(fill='both', expand=True, padx=12, pady=(0, 10))
 
         self._tree = ttk.Treeview(tree_wrap, columns=PREVIEW_COLS,
                                   show='headings', height=9,
-                                  selectmode='extended')
+                                  selectmode='extended', style='Dark.Treeview')
         for col, w in zip(PREVIEW_COLS, COL_WIDTHS):
             self._tree.heading(col, text=col,
                                command=lambda c=col: self._sort_by(c))
@@ -121,30 +190,62 @@ class App(tk.Tk):
         tree_wrap.columnconfigure(0, weight=1)
 
         # ── [4] 저장 위치 ─────────────────────────────────────────────────────
-        row2 = ttk.Frame(main)
-        row2.pack(fill='x', pady=(0, 6))
+        row2 = ctk.CTkFrame(main, fg_color=_FRAME, corner_radius=10)
+        row2.pack(fill='x', pady=(0, 8))
 
-        ttk.Label(row2, text='저장 위치:').pack(side='left')
-        ttk.Entry(row2, textvariable=self._outpath, width=52).pack(
-            side='left', padx=(4, 4), expand=True, fill='x')
-        ttk.Button(row2, text='변경…',
-                   command=self._select_outpath).pack(side='left', padx=2)
+        inner2 = ctk.CTkFrame(row2, fg_color='transparent')
+        inner2.pack(fill='x', padx=12, pady=8)
+
+        ctk.CTkLabel(inner2, text='저장 위치', text_color=_FG).pack(side='left')
+        ctk.CTkEntry(inner2, textvariable=self._outpath,
+                     fg_color=_BG, border_color=_ACCENT,
+                     text_color=_FG).pack(
+            side='left', padx=(8, 8), expand=True, fill='x')
+        ctk.CTkButton(inner2, text='변경…', command=self._select_outpath,
+                      width=70, corner_radius=8,
+                      fg_color='#313244', text_color=_FG,
+                      hover_color=_ACCENT).pack(side='left')
 
         # ── [5] 생성 버튼 + 진행 상태 ────────────────────────────────────────
-        bottom = ttk.Frame(main)
-        bottom.pack(fill='x')
+        bottom_card = ctk.CTkFrame(main, fg_color=_FRAME, corner_radius=10)
+        bottom_card.pack(fill='x', pady=(0, 6))
 
-        self._gen_btn = ttk.Button(
-            bottom, text='  ▶  생성하기  ', command=self._generate, width=18)
-        self._gen_btn.pack(side='left', padx=(0, 10))
+        bottom = ctk.CTkFrame(bottom_card, fg_color='transparent')
+        bottom.pack(fill='x', padx=12, pady=10)
 
-        progress_frame = ttk.Frame(bottom)
+        self._gen_btn = ctk.CTkButton(
+            bottom, text='  ▶  생성하기', command=self._generate,
+            width=130, height=36, corner_radius=10,
+            fg_color=_ACCENT, text_color=_BG,
+            hover_color='#74c7ec', font=ctk.CTkFont(size=13, weight='bold'))
+        self._gen_btn.pack(side='left', padx=(0, 14))
+
+        progress_frame = ctk.CTkFrame(bottom, fg_color='transparent')
         progress_frame.pack(side='left', fill='x', expand=True)
 
-        self._progress = ttk.Progressbar(progress_frame, mode='determinate', length=300)
-        self._progress.pack(fill='x')
-        ttk.Label(progress_frame, textvariable=self._status,
-                  foreground='gray').pack(anchor='w')
+        self._progress = ctk.CTkProgressBar(progress_frame,
+                                            fg_color='#313244',
+                                            progress_color=_ACCENT)
+        self._progress.set(0)
+        self._progress.pack(fill='x', pady=(2, 4))
+
+        ctk.CTkLabel(progress_frame, textvariable=self._status,
+                     text_color='#6c7086', anchor='w').pack(anchor='w')
+
+        # ── [6] 하단 푸터 ────────────────────────────────────────────────────
+        ctk.CTkFrame(main, height=1, fg_color='#313244',
+                     corner_radius=0).pack(fill='x', pady=(4, 4))
+        footer = ctk.CTkFrame(main, fg_color='transparent')
+        footer.pack(fill='x')
+
+        ctk.CTkLabel(footer, text='© 2026 TeacherCHO84',
+                     text_color='#a6adc8', font=ctk.CTkFont(size=14)).pack(side='left')
+        email_lbl = ctk.CTkLabel(footer, text='teachercho84@gmail.com',
+                                 text_color=_ACCENT, font=ctk.CTkFont(size=14),
+                                 cursor='hand2')
+        email_lbl.pack(side='right')
+        email_lbl.bind('<Button-1>',
+                       lambda e: webbrowser.open('mailto:teachercho84@gmail.com'))
 
     # ── 병합 / 해제 ───────────────────────────────────────────────────────────
 
@@ -166,7 +267,6 @@ class App(tk.Tk):
         sorted_s = sorted(students, key=lambda s: s['시작일'])
         merged = dict(sorted_s[0])
         merged['종료일'] = sorted_s[-1]['시작일']
-        # 원본 날짜 목록 저장 (병합 해제용)
         merged['_원본'] = [dict(s) for s in sorted_s]
 
         for i in reversed(indices):
@@ -246,11 +346,24 @@ class App(tk.Tk):
             self._edit_entry.destroy()
             self._edit_entry = None
 
-        var   = tk.StringVar(value=current)
-        entry = ttk.Entry(self._tree, textvariable=var)
-        entry.place(x=x, y=y, width=width, height=height)
-        entry.focus_set()
-        entry.select_range(0, 'end')
+        var = tk.StringVar(value=current)
+
+        if col_name == '증빙서류':
+            _JEUNGBI = ['', '진단서', '소견서', '진료 확인서', '처방전',
+                        '공문', '담임교사 확인서', '기타']
+            entry = ttk.Combobox(self._tree, textvariable=var,
+                                 values=_JEUNGBI, state='readonly',
+                                 font=('', 9))
+            entry.place(x=x, y=y, width=width, height=height)
+            entry.focus_set()
+        else:
+            entry = tk.Entry(self._tree, textvariable=var,
+                             bg='#313244', fg=_FG,
+                             insertbackground=_FG,
+                             relief='flat', font=('', 9))
+            entry.place(x=x, y=y, width=width, height=height)
+            entry.focus_set()
+            entry.select_range(0, 'end')
         self._edit_entry = entry
 
         def _save(event=None):
@@ -273,7 +386,6 @@ class App(tk.Tk):
                     except Exception:
                         pass
                 elif col_name == '결시교시':
-                    # "X~Y" 형식
                     if '~' in new_val:
                         parts = new_val.split('~', 1)
                         s['시작교시'] = parts[0].strip()
@@ -344,16 +456,16 @@ class App(tk.Tk):
             return
         teacher_name = self._teacher.get().strip()
 
-        self._gen_btn.config(state='disabled')
-        self._progress['value'] = 0
+        self._gen_btn.configure(state='disabled')
+        self._progress.set(0)
         self._status.set('생성 중…')
 
         def _run():
             try:
                 def on_progress(i, total):
-                    pct = int(i / total * 100) if total > 0 else 0
+                    pct = i / total if total > 0 else 0
                     self.after(0, lambda p=pct, ci=i, t=total:
-                               (self._progress.config(value=p),
+                               (self._progress.set(p),
                                 self._status.set(f'처리 중… {ci}/{t}명')))
 
                 build_hwpx(self._students, grade, class_num, teacher_name,
@@ -363,14 +475,14 @@ class App(tk.Tk):
                 self.after(0, lambda err=str(e):
                            (messagebox.showerror('생성 실패', err),
                             self._status.set('오류 발생.'),
-                            self._gen_btn.config(state='normal')))
+                            self._gen_btn.configure(state='normal')))
 
         threading.Thread(target=_run, daemon=True).start()
 
     def _on_done(self, outpath):
-        self._progress['value'] = 100
+        self._progress.set(1)
         self._status.set(f'완료: {os.path.basename(outpath)}')
-        self._gen_btn.config(state='normal')
+        self._gen_btn.configure(state='normal')
         if messagebox.askyesno(
                 '생성 완료',
                 f'결석신고서 {len(self._students)}명분 생성 완료!\n\n'
