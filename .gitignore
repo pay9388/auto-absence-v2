@@ -6,3 +6,5 @@ build/
 *.spec
 .DS_Store
 .claude/
+config.json
+*.xlsx

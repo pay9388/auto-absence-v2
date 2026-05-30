@@ -30,7 +30,7 @@ def _parse_periods(val):
         return '', ''
     nums = []
     for part in str(val).split(','):
-        m = re.match(r'^(\d+)교시$', part.strip())
+        m = re.match(r'^(\d+)교시', part.strip())
         if m:
             nums.append(int(m.group(1)))
     if not nums:

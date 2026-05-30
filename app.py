@@ -1,8 +1,12 @@
 """결석신고서 자동 생성기 v2 - CustomTkinter UI"""
+import json
 import os
+import re
+import sys
 import threading
 import tkinter as tk
 import webbrowser
+from pathlib import Path
 from tkinter import filedialog, messagebox, ttk
 
 import customtkinter as ctk
@@ -96,6 +100,7 @@ class App(ctk.CTk):
 
         _apply_treeview_style()
         self._build_ui()
+        self._load_config()
 
     def _build_ui(self):
         main = ctk.CTkFrame(self, fg_color='transparent')
@@ -343,6 +348,12 @@ class App(ctk.CTk):
         current = self._tree.item(iid, 'values')[col_idx]
 
         if self._edit_entry:
+            after_id = getattr(self._edit_entry, '_post_after_id', None)
+            if after_id:
+                try:
+                    self.after_cancel(after_id)
+                except Exception:
+                    pass
             self._edit_entry.destroy()
             self._edit_entry = None
 
@@ -356,6 +367,8 @@ class App(ctk.CTk):
                                  font=('', 9))
             entry.place(x=x, y=y, width=width, height=height)
             entry.focus_set()
+            after_id = entry.after(100, lambda e=entry: e.winfo_exists() and e.tk.call('ttk::combobox::Post', e))
+            entry._post_after_id = after_id
         else:
             entry = tk.Entry(self._tree, textvariable=var,
                              bg='#313244', fg=_FG,
@@ -404,10 +417,21 @@ class App(ctk.CTk):
                 entry.destroy()
                 self._edit_entry = None
 
-        entry.bind('<Return>',   _save)
-        entry.bind('<Tab>',      _save)
-        entry.bind('<Escape>',   _cancel)
-        entry.bind('<FocusOut>', _save)
+        if col_name == '증빙서류':
+            entry.bind('<Escape>',              _cancel)
+            entry.bind('<<ComboboxSelected>>', _save)
+            def _combo_focus_out(event=None):
+                try:
+                    if 'popdown' not in str(entry.tk.call('focus')):
+                        _save()
+                except Exception:
+                    pass
+            entry.bind('<FocusOut>', _combo_focus_out)
+        else:
+            entry.bind('<Return>',   _save)
+            entry.bind('<Tab>',      _save)
+            entry.bind('<Escape>',   _cancel)
+            entry.bind('<FocusOut>', _save)
 
     # ── 이벤트 핸들러 ─────────────────────────────────────────────────────────
 
@@ -428,6 +452,13 @@ class App(ctk.CTk):
             self._refresh_tree()
             self._count_var.set(f'{len(students)}명 로드됨')
             self._status.set(f'{len(students)}명 데이터 로드 완료.')
+            if students:
+                month = students[0]['시작일'].month
+                current = self._outpath.get()
+                updated = re.sub(r'\(\d+월\)(\.hwpx)$', rf'({month}월)\1', current)
+                if updated == current:
+                    updated = re.sub(r'(\.hwpx)$', rf'({month}월)\1', current)
+                self._outpath.set(updated)
         except Exception as e:
             messagebox.showerror('파일 오류', str(e))
             self._status.set('파일 로드 실패.')
@@ -455,6 +486,7 @@ class App(ctk.CTk):
             messagebox.showwarning('경고', '반 번호를 올바르게 입력해주세요.')
             return
         teacher_name = self._teacher.get().strip()
+        self._save_config()
 
         self._gen_btn.configure(state='disabled')
         self._progress.set(0)
@@ -478,6 +510,34 @@ class App(ctk.CTk):
                             self._gen_btn.configure(state='normal')))
 
         threading.Thread(target=_run, daemon=True).start()
+
+    def _config_path(self):
+        if getattr(sys, 'frozen', False):
+            return Path(sys.executable).parent / 'config.json'
+        return Path(__file__).parent / 'config.json'
+
+    def _load_config(self):
+        p = self._config_path()
+        if not p.exists():
+            return
+        try:
+            cfg = json.loads(p.read_text(encoding='utf-8'))
+            self._grade.set(cfg.get('grade', '2'))
+            self._class_num.set(cfg.get('class_num', ''))
+            self._teacher.set(cfg.get('teacher', ''))
+        except Exception:
+            pass
+
+    def _save_config(self):
+        p = self._config_path()
+        try:
+            p.write_text(json.dumps({
+                'grade':     self._grade.get(),
+                'class_num': self._class_num.get(),
+                'teacher':   self._teacher.get(),
+            }, ensure_ascii=False, indent=2), encoding='utf-8')
+        except Exception:
+            pass
 
     def _on_done(self, outpath):
         self._progress.set(1)
