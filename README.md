@@ -92,6 +92,8 @@ build.bat
 - 학년/반/담임교사 설정 자동 저장 및 재실행 시 복원 (`config.json`)
 - 증빙서류 더블클릭 시 드롭다운 자동 열기 및 안정성 개선
 - 파일 로드 시 저장 파일명에 월 자동 반영 (예: `결석신고서_출력(5월).hwpx`)
+- `build.bat` 한글 인코딩 문제 해결: 빌드 로직을 `build.py`로 분리, 배치파일은 호출만
+- `absence_v2.spec` GitHub 추가 및 `.gitignore` 정리 (`config.json`, `*.xlsx` 제외)
 
 ### v2.1 (2026-04-02)
 - CustomTkinter 기반 다크모드 UI 전면 적용
