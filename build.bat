@@ -1,38 +1,33 @@
 @echo off
-chcp 65001 > /dev/null
+chcp 65001 > nul
 echo ========================================
-echo  °á¼®½Å°í¼­ ÀÚµ¿ »ı¼º±â v2 ºôµå
+echo  ê²°ì„ì‹ ê³ ì„œ ìë™ ìƒì„±ê¸° v2 ë¹Œë“œ
 echo ========================================
 echo.
 
 pip install -r requirements.txt
 if errorlevel 1 (
-    echo [¿À·ù] ÆĞÅ°Áö ¼³Ä¡ ½ÇÆĞ
+    echo [ì˜¤ë¥˜] íŒ¨í‚¤ì§€ ì„¤ì¹˜ ì‹¤íŒ¨
     pause
     exit /b 1
 )
 
 echo.
-echo [ºôµå ½ÃÀÛ...]
-pyinstaller --onefile --windowed ^
-    --name "absence_v2" ^
-    --icon "assets/icon.ico" ^
-    --add-data "assets/template.hwpx;assets" ^
-    --collect-data customtkinter ^
-    app.py
+echo [ë¹Œë“œ ì¤‘...]
+pyinstaller absence_v2.spec --noconfirm
 
 if errorlevel 1 (
-    echo [¿À·ù] ºôµå ½ÇÆĞ
+    echo [ì˜¤ë¥˜] ë¹Œë“œ ì‹¤íŒ¨
     pause
     exit /b 1
 )
 
 echo.
-echo [ÆÄÀÏ¸í º¯°æ Áß...]
-python -c "import os; src=r'dist/absence_v2.exe'; dst=r'dist/°á¼®½Å°í¼­_»ı¼º±â_v2.exe'; [os.remove(dst) if os.path.exists(dst) else None, os.rename(src, dst)]; print('¿Ï·á:', dst)"
+echo [íŒŒì¼ëª… ë³€ê²½ ì¤‘...]
+python -c "import os; src=r'dist/absence_v2.exe'; dst=r'dist/ê²°ì„ì‹ ê³ ì„œ_ìƒì„±ê¸°_v2.exe'; os.path.exists(dst) and os.remove(dst); os.rename(src, dst); print('ì™„ë£Œ:', dst)"
 
 echo.
 echo ========================================
-echo  ºôµå ¿Ï·á!  dist\°á¼®½Å°í¼­_»ı¼º±â_v2.exe
+echo  ë¹Œë“œ ì™„ë£Œ!  dist\ê²°ì„ì‹ ê³ ì„œ_ìƒì„±ê¸°_v2.exe
 echo ========================================
 pause
