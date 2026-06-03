@@ -169,6 +169,10 @@ class App(ctk.CTk):
         ctk.CTkButton(btn_row, text='병합 해제', command=self._split_selected,
                       width=84, height=28, corner_radius=6,
                       fg_color='#313244', text_color=_FG,
+                      hover_color='#f38ba8').pack(side='left', padx=(0, 6))
+        ctk.CTkButton(btn_row, text='선택 삭제', command=self._delete_selected,
+                      width=84, height=28, corner_radius=6,
+                      fg_color='#313244', text_color='#f38ba8',
                       hover_color='#f38ba8').pack(side='left')
 
         # Treeview (tk.Frame 으로 감싸서 배경 통일)
@@ -296,6 +300,19 @@ class App(ctk.CTk):
         self._students.pop(idx)
         for i, orig in enumerate(originals):
             self._students.insert(idx + i, orig)
+        self._refresh_tree()
+        self._count_var.set(f'{len(self._students)}건 로드됨')
+
+    def _delete_selected(self):
+        selected = self._tree.selection()
+        if not selected:
+            messagebox.showwarning('경고', '삭제할 항목을 선택해주세요.')
+            return
+        if not messagebox.askyesno('확인', f'선택한 {len(selected)}건을 삭제할까요?'):
+            return
+        indices = sorted((self._tree.index(iid) for iid in selected), reverse=True)
+        for i in indices:
+            self._students.pop(i)
         self._refresh_tree()
         self._count_var.set(f'{len(self._students)}건 로드됨')
 
